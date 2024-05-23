@@ -44,6 +44,7 @@ int main(int argc, char *argv[])
 	{
 	    printf("Opening %s ... ",DEV_NAME[i]);
 	    fd = open(DEV_NAME[i], O_RDWR);
+	    break;
 	    if (fd < 0) {
 		printf("%s\n", strerror(errno));
 	    }
