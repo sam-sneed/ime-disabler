@@ -1,2 +1,2 @@
 # ime-disabler
-Update of bol-van's me-disable
+Remake of bol-van's me-disable
