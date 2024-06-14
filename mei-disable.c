@@ -1,17 +1,16 @@
 #include <stdio.h>
-#include <string.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <sys/ioctl.h>
-#include <sys/stat.h>
 #include <linux/mei.h>
 #include <unistd.h>
-#include <errno.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 
-#define _countof(a) (sizeof(a)/sizeof(*(a)))
-#define NUM_DEV_NAMES 5
-char *DEF_DEV_NAMES[NUM_DEV_NAMES] = {"mei0", "mei", "mei1", "mei2", "mei3"};
+// Disable Intel ME engine.
+// This was tested on Z87 board.
+// Payload data taken from reverse-engineered fpt.exe v9.5.
 
 struct guid
 {
@@ -28,16 +27,20 @@ static const struct guid mkhi_guid = {
 	{0x88, 0xEF, 0x9E, 0x39, 0xC6, 0xF6, 0x3E, 0x0F}
 };
 
+
+
 uint8_t disable_cmd[] = {0xff,0x10,0x00,0x00};
 
+#define NUM_DEV_NAMES 5
+char *DEF_DEV_NAMES[NUM_DEV_NAMES] = {"/dev/mei0", "/dev/mei", "/dev/mei1", "/dev/mei2", "/dev/mei3"};
 
-char *find_dev_name() {
+char *imeCheck() {
     char *dev_name = NULL;
     struct stat st;
 
     for (int i = 0; i < NUM_DEV_NAMES; i++) {
         char path[20];
-        snprintf(path, sizeof(path), "/dev/%s", DEF_DEV_NAMES[i]);
+        snprintf(path, sizeof(path), "%s", DEF_DEV_NAMES[i]);
 
         if (stat(path, &st) == 0) {
             dev_name = DEF_DEV_NAMES[i];
@@ -46,42 +49,49 @@ char *find_dev_name() {
     }
 
     if (dev_name == NULL) {
-        perror("device not found");
+        perror("ME Device not found.\n");
         exit(1);
     }
-
+    printf("Found ME device!\n");
     return dev_name;
 }
 
-int main() {
-	char *dev_name = find_dev_name();
-	printf("Device found: %s\n", dev_name);
-	int fd = open(dev_name, O_RDWR);
+int main(int argc, char *argv[])
+{
+	int fd;
+	int rc;
+	int i;
 	struct mei_connect_client_data meidata;
-
+	char *DEV_NAME = imeCheck();
+	printf("Opening %s ... ", DEV_NAME);
+	fd = open(DEV_NAME, O_RDWR);
+	if (fd < 0) {
+		printf("error\n"); fflush(stdout);
+		perror("mei device open");
+		return 1;
+	}
 	printf("opened\n");
 
 	memcpy(&meidata.in_client_uuid,&mkhi_guid,sizeof(mkhi_guid));
-
+	
 	printf("Sending IOCTL_MEI_CONNECT_CLIENT .. ");
-    	// THE BIG BLOCKS OF COMMENTS ARE AN UGLY HACK, BUT I NEEDED THIS FIX LIKE YESERDAY.
-	int rc = ioctl(fd, IOCTL_MEI_CONNECT_CLIENT, &meidata);
-	//if (rc < 0) {
-		//printf("error\n"); fflush(stdout);
-		//perror("ioctl");
-		//close(fd);
-		//return 1;
-	//}
+	rc = ioctl(fd, IOCTL_MEI_CONNECT_CLIENT, &meidata);
+	if (rc < 0) {
+		printf("error\n"); fflush(stdout);
+		perror("ioctl");
+		close(fd);
+		return 1;
+	}
 	printf("ok\n");
 
 	printf("Writing disableme payload .. ");
 	rc = write(fd, disable_cmd, sizeof(disable_cmd));
-	//if (rc < 0) {
-		//printf("error\n"); fflush(stdout);
-		//perror("write");
-		//close(fd);
-		//return 1;
-	//}
+	if (rc < 0) {
+		printf("error\n"); fflush(stdout);
+		perror("write");
+		close(fd);
+		return 1;
+	}
 	fsync(fd);
 	printf("written %d bytes\n",rc);
 
